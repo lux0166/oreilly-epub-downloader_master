@@ -51,13 +51,20 @@ This automatically opens your browser at `http://127.0.0.1:8000`. Inside the das
 
 ### 1. Export cookies from O'Reilly
 
+#### Method A: Cookie-Editor Extension (Easiest)
+1. Install the **Cookie-Editor** browser extension ([Chrome Web Store](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhceonfjogjjoaoakdhinep) / [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/cookie-editor/)).
+2. Log into your account (standard `learning.oreilly.com` or via your institutional/library proxy portal).
+3. Click the extension icon, click **Export**, and select **JSON** to copy the cookies to your clipboard.
+4. Save the clipboard contents to a file named `cookies.json` in this project directory.
+
+#### Method B: Browser Console
 1. Log into your account (standard `learning.oreilly.com` or via your institutional/library proxy login).
 2. Open Developer Tools (F12 / `Cmd+Option+I`).
 3. In the **Console** tab, run:
    ```javascript
    JSON.stringify(Object.fromEntries(document.cookie.split('; ').map(c => c.split('='))))
    ```
-4. Copy the JSON output string and save it to a local file named `cookies.json`.
+4. Copy the JSON output string and save it to a file named `cookies.json`.
 
 ### 2. Download books
 

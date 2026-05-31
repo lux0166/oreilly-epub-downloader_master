@@ -96,14 +96,22 @@
                                 <i class="ph-light ph-caret-down"></i>
                             </summary>
                             <div class="accordion-content">
+                                <h4 style="margin: 10px 0 5px; font-size: 0.9rem; color: var(--text-primary);">Option 1: Cookie-Editor Extension (Recommended)</h4>
+                                <ol class="steps-list" style="margin-bottom: 15px;">
+                                    <li>Install the <strong>Cookie-Editor</strong> extension in your browser.</li>
+                                    <li>Log into your O'Reilly or library account.</li>
+                                    <li>Click the extension icon, click <strong>Export</strong>, and choose <strong>JSON</strong>.</li>
+                                    <li>Save the clipboard content as <code>cookies.json</code> and drag & drop it here.</li>
+                                </ol>
+                                
+                                <h4 style="margin: 10px 0 5px; font-size: 0.9rem; color: var(--text-primary);">Option 2: Browser Console</h4>
                                 <ol class="steps-list">
-                                    <li>Log into <a href="https://learning.oreilly.com" target="_blank">learning.oreilly.com</a> in your browser.</li>
+                                    <li>Log into your account in your browser.</li>
                                     <li>Open Developer Tools (Press F12 / Cmd+Opt+I).</li>
                                     <li>Go to <strong>Console</strong> and run this command:
                                         <pre><code>JSON.stringify(Object.fromEntries(document.cookie.split('; ').map(c => c.split('='))))</code></pre>
                                     </li>
                                     <li>Copy the output and save it as <code>cookies.json</code>.</li>
-                                    <li>Drag and drop the file in the area above.</li>
                                 </ol>
                             </div>
                         </details>
