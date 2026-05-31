@@ -3,6 +3,9 @@
 import random
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+from typing import Any, Callable
 from urllib.parse import urljoin
 
 import httpx
@@ -27,8 +30,21 @@ def human_delay(min_ms: int = 300, max_ms: int = 1500) -> None:
 class OreillyClient:
     """Client for interacting with O'Reilly Learning API."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, progress_callback: Callable[[str, Any], None] | None = None, max_workers: int = 5):
         self.session = session
+        self.progress_callback = progress_callback
+        self.max_workers = max_workers
+        
+        # Determine API base and Content base dynamically if proxy is used
+        proxy_base_url = session.cookies.get("__proxy_base_url__")
+        if proxy_base_url:
+            self.api_base = urljoin(proxy_base_url, "api/v2/")
+            self.content_base = proxy_base_url
+            console.print(f"[bold yellow]Using Proxy Gateway:[/] {proxy_base_url}")
+        else:
+            self.api_base = API_BASE
+            self.content_base = CONTENT_BASE
+
         self.http = httpx.Client(
             headers={
                 "User-Agent": (
@@ -39,7 +55,7 @@ class OreillyClient:
                 "Accept": "application/json, text/html, */*",
                 "Accept-Language": "en-US,en;q=0.9",
                 "Cookie": session.get_cookie_header(),
-                "Referer": "https://learning.oreilly.com/",
+                "Referer": self.content_base,
             },
             follow_redirects=True,
             timeout=30.0,
@@ -59,10 +75,18 @@ class OreillyClient:
         # Get book metadata
         metadata = self._get_metadata(book_id)
         console.print(f"[green]Found:[/] {metadata}")
+        if self.progress_callback:
+            self.progress_callback("metadata", {
+                "title": metadata.title,
+                "authors": metadata.authors,
+                "cover_url": metadata.cover_url
+            })
 
         # Get table of contents / chapters
         chapters = self._get_chapters(book_id)
         console.print(f"[green]Found {len(chapters)} chapters[/]")
+        if self.progress_callback:
+            self.progress_callback("chapters_count", len(chapters))
 
         # Fetch chapter content
         self._fetch_chapter_content(chapters)
@@ -72,13 +96,17 @@ class OreillyClient:
         console.print(f"[green]Downloaded {len(images)} images[/]")
 
         # Fetch cover image
+        if self.progress_callback:
+            self.progress_callback("cover_start", True)
         cover_image = self._fetch_cover(metadata.cover_url)
+        if self.progress_callback:
+            self.progress_callback("cover_done", True)
 
         return Book(metadata=metadata, chapters=chapters, cover_image=cover_image, images=images)
 
     def _get_metadata(self, book_id: str) -> BookMetadata:
         """Fetch book metadata from API."""
-        url = f"{API_BASE}epubs/urn:orm:book:{book_id}/"
+        url = f"{self.api_base}epubs/urn:orm:book:{book_id}/"
         response = self.http.get(url)
 
         if response.status_code == 404:
@@ -113,7 +141,7 @@ class OreillyClient:
         console.print(f"[dim]Fetching table of contents...[/]")
 
         # Use the chapters API endpoint
-        chapters_url = f"{API_BASE}epub-chapters/?epub_identifier=urn:orm:book:{book_id}"
+        chapters_url = f"{self.api_base}epub-chapters/?epub_identifier=urn:orm:book:{book_id}"
         human_delay(500, 1000)
 
         response = self.http.get(chapters_url)
@@ -147,7 +175,7 @@ class OreillyClient:
 
     def _get_chapters_fallback(self, book_id: str) -> list[Chapter]:
         """Fallback: scrape chapter list from the book page."""
-        book_page_url = f"{CONTENT_BASE}library/view/-/{book_id}/"
+        book_page_url = f"{self.content_base}library/view/-/{book_id}/"
 
         human_delay(500, 1000)
         response = self.http.get(book_page_url)
@@ -171,7 +199,7 @@ class OreillyClient:
             seen_urls.add(href)
 
             title = link.get_text(strip=True) or f"Chapter {len(chapters) + 1}"
-            content_url = urljoin(CONTENT_BASE, href)
+            content_url = urljoin(self.content_base, href)
             chapter_id = href.split("/")[-1].replace(".html", "")
 
             chapters.append(
@@ -187,55 +215,64 @@ class OreillyClient:
         return chapters
 
     def _fetch_chapter_content(self, chapters: list[Chapter]) -> None:
-        """Fetch HTML content for all chapters with human-like pacing."""
+        """Fetch HTML content for all chapters concurrently using ThreadPoolExecutor."""
+        total_chapters = len(chapters)
+        
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("Downloading chapters...", total=len(chapters))
+            task = progress.add_task("Downloading chapters...", total=total_chapters)
+            
+            completed_count = 0
+            counter_lock = Lock()
 
-            for i, chapter in enumerate(chapters):
-                progress.update(task, description=f"Downloading: {chapter.title[:40]}")
-
+            def download_chapter(idx: int, chapter: Chapter):
+                nonlocal completed_count
                 if not chapter.content_url:
-                    progress.advance(task)
-                    continue
+                    with counter_lock:
+                        completed_count += 1
+                        progress.advance(task)
+                    return
 
-                # Add human-like delay between chapter requests
-                # Vary delay more for early chapters, settle into rhythm
-                if i < 3:
-                    human_delay(1000, 2500)
-                else:
-                    human_delay(500, 1500)
+                # Stagger thread start slightly
+                time.sleep(random.uniform(0.05, 0.25))
 
                 try:
                     response = self.http.get(chapter.content_url)
                     response.raise_for_status()
-
-                    # Check if response is JSON (API) or HTML (direct content)
+                    
                     content_type = response.headers.get("content-type", "")
-
                     if "json" in content_type:
                         data = response.json()
-                        chapter.html_content = data.get("content", "")
+                        html_content = data.get("content", "")
                     else:
-                        chapter.html_content = response.text
+                        html_content = response.text
 
-                    # Clean up the HTML content
-                    chapter.html_content = self._clean_html(chapter.html_content)
+                    chapter.html_content = self._clean_html(html_content)
+                except Exception as e:
+                    console.print(f"[yellow]Warning: Failed to fetch {chapter.title}: {e}[/]")
+                    chapter.html_content = f"<p>Error: Failed to download chapter content ({e})</p>"
+                
+                with counter_lock:
+                    completed_count += 1
+                    progress.update(task, description=f"Downloaded: {chapter.title[:30]}")
+                    progress.advance(task)
+                    if self.progress_callback:
+                        self.progress_callback("chapter_download", {
+                            "index": completed_count,
+                            "total": total_chapters,
+                            "title": chapter.title
+                        })
 
-                except httpx.HTTPError as e:
-                    console.print(
-                        f"[yellow]Warning: Failed to fetch {chapter.title}: {e}[/]"
-                    )
-                    # On error, wait a bit longer before next request
-                    human_delay(2000, 4000)
-
-                progress.advance(task)
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = [executor.submit(download_chapter, i, chapter) for i, chapter in enumerate(chapters)]
+                for future in as_completed(futures):
+                    future.result()
 
     def _fetch_images(self, chapters: list[Chapter]) -> dict[str, Image]:
-        """Extract and download all images from chapters."""
+        """Extract and download all images from chapters concurrently."""
         # First, collect all unique image URLs
         image_urls: set[str] = set()
 
@@ -249,7 +286,7 @@ class OreillyClient:
                 if src and not src.startswith("data:"):
                     # Make absolute URL
                     if not src.startswith("http"):
-                        src = urljoin(CONTENT_BASE, src)
+                        src = urljoin(self.content_base, src)
                     image_urls.add(src)
 
         if not image_urls:
@@ -257,19 +294,26 @@ class OreillyClient:
 
         # Download images
         images: dict[str, Image] = {}
+        total_images = len(image_urls)
+        url_list = list(image_urls)
+        
+        if self.progress_callback:
+            self.progress_callback("images_start", total_images)
 
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("Downloading images...", total=len(image_urls))
+            task = progress.add_task("Downloading images...", total=total_images)
+            
+            completed_images = 0
+            images_lock = Lock()
 
-            for url in image_urls:
-                progress.update(task, description=f"Image: {url.split('/')[-1][:30]}")
-
+            def download_image(idx: int, url: str):
+                nonlocal completed_images
                 try:
-                    human_delay(100, 300)  # Shorter delay for images
+                    time.sleep(random.uniform(0.01, 0.05))
                     response = self.http.get(url)
                     response.raise_for_status()
 
@@ -292,17 +336,33 @@ class OreillyClient:
                     else:
                         media_type = "image/png"
 
-                    images[url] = Image(
+                    img_obj = Image(
                         url=url,
                         filename=f"images/{filename}",
                         data=response.content,
                         media_type=media_type,
                     )
-
-                except httpx.HTTPError as e:
+                    with images_lock:
+                        images[url] = img_obj
+                except Exception as e:
                     console.print(f"[yellow]Warning: Failed to fetch image {url}: {e}[/]")
 
-                progress.advance(task)
+                with images_lock:
+                    completed_images += 1
+                    progress.update(task, description=f"Image: {url.split('/')[-1][:30]}")
+                    progress.advance(task)
+                    if self.progress_callback:
+                        self.progress_callback("image_download", {
+                            "index": completed_images,
+                            "total": total_images,
+                            "filename": url.split("/")[-1]
+                        })
+
+            # Run in thread pool
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = [executor.submit(download_image, i, url) for i, url in enumerate(url_list)]
+                for future in as_completed(futures):
+                    future.result()
 
         # Now update chapter HTML to use local image paths
         for chapter in chapters:
@@ -321,7 +381,7 @@ class OreillyClient:
                 continue
 
             # Make absolute URL for lookup
-            abs_url = src if src.startswith("http") else urljoin(CONTENT_BASE, src)
+            abs_url = src if src.startswith("http") else urljoin(self.content_base, src)
 
             if abs_url in images:
                 img["src"] = images[abs_url].filename
@@ -367,7 +427,7 @@ class OreillyClient:
         for img in soup.find_all("img"):
             src = img.get("src", "")
             if src and not src.startswith(("http", "data:")):
-                img["src"] = urljoin(CONTENT_BASE, src)
+                img["src"] = urljoin(self.content_base, src)
 
         # Get inner content - either from body, the content div, or the whole thing
         body = soup.find("body")
@@ -389,7 +449,7 @@ class OreillyClient:
         try:
             # Make URL absolute if needed
             if not cover_url.startswith("http"):
-                cover_url = urljoin(CONTENT_BASE, cover_url)
+                cover_url = urljoin(self.content_base, cover_url)
 
             response = self.http.get(cover_url)
             response.raise_for_status()

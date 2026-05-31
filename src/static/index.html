@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>O'Reilly EPUB Downloader</title>
+    <!-- Plus Jakarta Sans Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons Light -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Ambient Background Gradients -->
+    <div class="radial-glow glow-1"></div>
+    <div class="radial-glow glow-2"></div>
+    
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-mark">
+                    <i class="ph-light ph-books"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>O'Reilly EPUB</h1>
+                    <span class="logo-sub">Downloader Utility</span>
+                </div>
+            </div>
+            
+            <div class="header-status">
+                <div id="connection-badge" class="badge">
+                    <span class="pulse-indicator status-online"></span>
+                    <span class="badge-text">Web Server Active</span>
+                </div>
+                <a href="https://github.com/lux0166" target="_blank" class="github-link">
+                    <i class="ph-light ph-github-logo"></i>
+                    <span>lux0166</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="main-grid">
+            <!-- Left Column: Session and Cookies -->
+            <div class="grid-column">
+                <!-- Double Bezel Cookie Panel -->
+                <div class="card-wrapper">
+                    <div class="card-core">
+                        <div class="card-header">
+                            <div class="header-icon"><i class="ph-light ph-key"></i></div>
+                            <h2>Session Credentials</h2>
+                        </div>
+                        
+                        <div class="session-status-box">
+                            <div class="status-indicator-row">
+                                <span class="status-label">Authentication Status:</span>
+                                <div id="session-badge" class="status-pill status-missing">
+                                    <span class="status-dot"></span>
+                                    <span id="session-status-text">Checking...</span>
+                                </div>
+                            </div>
+                            <div id="session-details" class="session-details">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Drag and Drop Zone -->
+                        <div id="drop-zone" class="drop-zone">
+                            <i class="ph-light ph-cloud-arrow-up drop-icon"></i>
+                            <div class="drop-text">
+                                <p class="drop-title">Drag & Drop <span>cookies.json</span></p>
+                                <p class="drop-sub">or click to browse your files</p>
+                            </div>
+                            <input type="file" id="cookie-file-input" accept=".json" style="display: none;">
+                        </div>
+
+                        <!-- OR Divider & Token Input -->
+                        <div class="or-divider">
+                            <span>OR PASTE TOKEN DIRECTLY</span>
+                        </div>
+
+                        <div class="token-paste-group">
+                            <div class="token-input-row">
+                                <input type="text" id="token-input" placeholder="Paste 'orm-jwt' value here..." autocomplete="off">
+                                <button id="save-token-btn" class="btn-token-save">Save</button>
+                            </div>
+                        </div>
+
+                        <!-- Expandable Guide -->
+                        <details class="instructions-accordion">
+                            <summary class="accordion-trigger">
+                                <span>How to export cookies?</span>
+                                <i class="ph-light ph-caret-down"></i>
+                            </summary>
+                            <div class="accordion-content">
+                                <ol class="steps-list">
+                                    <li>Log into <a href="https://learning.oreilly.com" target="_blank">learning.oreilly.com</a> in your browser.</li>
+                                    <li>Open Developer Tools (Press F12 / Cmd+Opt+I).</li>
+                                    <li>Go to <strong>Console</strong> and run this command:
+                                        <pre><code>JSON.stringify(Object.fromEntries(document.cookie.split('; ').map(c => c.split('='))))</code></pre>
+                                    </li>
+                                    <li>Copy the output and save it as <code>cookies.json</code>.</li>
+                                    <li>Drag and drop the file in the area above.</li>
+                                </ol>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Download Console -->
+            <div class="grid-column">
+                <!-- Double Bezel Download Panel -->
+                <div class="card-wrapper">
+                    <div class="card-core">
+                        <div class="card-header">
+                            <div class="header-icon"><i class="ph-light ph-download-simple"></i></div>
+                            <h2>Download Book</h2>
+                        </div>
+
+                        <!-- Input Form -->
+                        <div class="download-form">
+                            <div class="input-group">
+                                <label for="book-input">Book ID or O'Reilly URL</label>
+                                <div class="input-wrapper">
+                                    <i class="ph-light ph-link input-icon"></i>
+                                    <input type="text" id="book-input" placeholder="e.g. 9781098166298 or learning.oreilly.com/library/view/..." autocomplete="off">
+                                </div>
+                            </div>
+                            
+                            <!-- Download Speed & Format Controls -->
+                            <div class="form-settings-row">
+                                <div class="input-group settings-group">
+                                    <label for="format-select">Format</label>
+                                    <div class="select-wrapper">
+                                        <select id="format-select">
+                                            <option value="epub" selected>EPUB (eBook)</option>
+                                            <option value="pdf">PDF (Document)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="input-group settings-group">
+                                    <div class="slider-label-row">
+                                        <label for="speed-slider">Speed</label>
+                                        <span id="speed-value">5 Workers</span>
+                                    </div>
+                                    <div class="slider-wrapper">
+                                        <input type="range" id="speed-slider" min="1" max="10" value="5">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button id="download-btn" class="btn btn-primary" disabled>
+                                <span>Start Download</span>
+                                <div class="btn-icon-wrapper">
+                                    <i class="ph-light ph-arrow-right"></i>
+                                </div>
+                            </button>
+                        </div>
+
+                        <!-- Checklist Progress -->
+                        <div id="progress-checklist" class="progress-checklist" style="display: none;">
+                            <div class="checklist-item" id="chk-metadata">
+                                <span class="chk-bullet"></span>
+                                <span class="chk-text">Fetching metadata</span>
+                            </div>
+                            <div class="checklist-item" id="chk-chapters">
+                                <span class="chk-bullet"></span>
+                                <span class="chk-text">Downloading chapters (0/0)</span>
+                            </div>
+                            <div class="checklist-item" id="chk-images">
+                                <span class="chk-bullet"></span>
+                                <span class="chk-text">Downloading images (0/0)</span>
+                            </div>
+                            <div class="checklist-item" id="chk-cover">
+                                <span class="chk-bullet"></span>
+                                <span class="chk-text">Retrieving cover art</span>
+                            </div>
+                            <div class="checklist-item" id="chk-epub">
+                                <span class="chk-bullet"></span>
+                                <span class="chk-text">Assembling EPUB</span>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar Container -->
+                        <div id="progress-container" class="progress-container" style="display: none;">
+                            <div class="progress-bar-track">
+                                <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                            </div>
+                            <div class="progress-percentage-row">
+                                <span id="progress-status-label">Downloading book...</span>
+                                <span id="progress-percentage-text">0%</span>
+                            </div>
+                        </div>
+
+                        <!-- Log Console -->
+                        <div class="console-box-wrapper">
+                            <div class="console-box-header">
+                                <span class="console-title">Process Logs</span>
+                                <button id="clear-logs" class="console-action-btn"><i class="ph-light ph-trash"></i> Clear</button>
+                            </div>
+                            <div id="log-console" class="log-console">
+                                <div class="log-line system-log">Console initialized. Ready for operations.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Library Section -->
+        <section class="library-section">
+            <div class="section-title-row">
+                <div class="section-icon"><i class="ph-light ph-books"></i></div>
+                <h2>Downloaded Books Library</h2>
+                <span id="library-count" class="library-count">0 books</span>
+            </div>
+            
+            <div id="library-grid" class="library-grid">
+                <!-- Loaded dynamically -->
+                <div class="empty-library">
+                    <i class="ph-light ph-folder-open empty-icon"></i>
+                    <p>No books downloaded yet.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Script imports -->
+    <script src="/static/app.js"></script>
+</body>
+</html>

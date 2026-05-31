@@ -1,58 +1,93 @@
-# O'Reilly EPUB Downloader
+# O'Reilly EPUB & PDF Downloader
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-A CLI to download O'Reilly books as EPUB for offline reading. Uses cookie-based authentication to access your subscription content and generates clean EPUBs with images, cover art, and proper chapter structure.
+A premium utility and Web UI to download O'Reilly books as EPUB or PDF for offline reading. Features include:
+- **Web UI & CLI**: Run in your terminal or start the dashboard server.
+- **Multi-threaded Downloading**: Configurable worker pools for rapid chapter and image downloads.
+- **EPUB & PDF Formats**: Compile books into standard EPUB packages or print-styled PDF files.
+- **EZProxy / Institutional Library Gateway**: Automatically detects and routes API calls through your institutional library proxy domain using session cookies.
+- **Reliable PDF Engine**: Includes BeautifulSoup table-cell sanitization and a ReportLab layout monkeypatch to prevent negative width rendering crashes on dense columns.
+
+---
 
 ## Installation
 
-```bash
-pip install -e .
-```
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/lux0166/oreilly-epub-downloader.git
+   cd oreilly-epub-downloader
+   ```
 
-## Usage
+2. Install the package in editable mode:
+   ```bash
+   pip install -e .
+   ```
+
+---
+
+## Web UI Dashboard
+
+Start the local web dashboard:
+```bash
+# Starts on default port 8000
+oreilly-dl --ui
+
+# Starts on custom port 8050
+oreilly-dl --ui --port 8050
+```
+This automatically opens your browser at `http://127.0.0.1:8000`. Inside the dashboard you can:
+- Drag and drop `cookies.json` or paste your raw `orm-jwt` token directly.
+- Input book IDs or URLs.
+- Choose between **EPUB** and **PDF** formats.
+- Slide the **Speed slider** to adjust download concurrency (1 to 10 workers).
+- View real-time download checklist progress and log consoles.
+- Access the Downloaded Books Library card deck to directly download or preview your files.
+
+---
+
+## Command Line Usage
 
 ### 1. Export cookies from O'Reilly
 
-1. Log into https://learning.oreilly.com in your browser
-2. Open Developer Tools (Cmd+Option+I)
-3. Go to Console and run:
+1. Log into your account (standard `learning.oreilly.com` or via your institutional/library proxy login).
+2. Open Developer Tools (F12 / `Cmd+Option+I`).
+3. In the **Console** tab, run:
    ```javascript
    JSON.stringify(Object.fromEntries(document.cookie.split('; ').map(c => c.split('='))))
    ```
-4. Save the output to `cookies.json`
+4. Copy the JSON output string and save it to a local file named `cookies.json`.
 
 ### 2. Download books
 
 ```bash
-# By book ID
+# Download as EPUB (Default)
 oreilly-dl 9781098166298 -c cookies.json
 
+# Download as PDF
+oreilly-dl 9781098166298 -c cookies.json --format pdf
+
 # By URL
-oreilly-dl "https://learning.oreilly.com/library/view/ai-engineering/9781098166298/" -c cookies.json
+oreilly-dl "https://learning.oreilly.com/library/view/ai-engineering/9781098166298/" -c cookies.json --format pdf
 
 # Custom output path
-oreilly-dl 9781098166298 -c cookies.json -o "My Book.epub"
+oreilly-dl 9781098166298 -c cookies.json --format pdf -o "custom_folder/AI_Engineering.pdf"
 ```
 
-Example output:
+Books are saved to the `./downloads/` folder by default.
 
-![Example output](assets/example.png)
-
-Books are saved to `./downloads/` by default.
+---
 
 ## Finding Book IDs
 
-The book ID is the number in the O'Reilly URL:
+The book ID is the number sequence in the book page URL:
 - URL: `https://learning.oreilly.com/library/view/ai-engineering/9781098166298/`
 - Book ID: `9781098166298`
 
-## Refreshing Cookies
-
-Cookies expire periodically. When downloads fail, re-export cookies from your browser.
+---
 
 ## Requirements
 
 - Python 3.11+
-- Active O'Reilly Learning subscription
+- Active O'Reilly subscription (personal or institutional library card)

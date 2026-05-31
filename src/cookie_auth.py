@@ -27,7 +27,7 @@ def load_cookies(cookie_file: Path) -> Session:
     else:
         raise ValueError("Invalid cookie file format")
 
-    if "orm-jwt" not in cookies:
-        raise ValueError("Missing orm-jwt cookie - are you logged into O'Reilly?")
+    if "orm-jwt" not in cookies and "ezproxy" not in cookies and "ezproxyn" not in cookies:
+        raise ValueError("Missing orm-jwt or ezproxy cookie - are you logged into O'Reilly?")
 
     return Session(cookies=cookies)

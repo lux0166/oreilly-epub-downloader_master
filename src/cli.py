@@ -39,21 +39,52 @@ def sanitize_filename(name: str) -> str:
 
 
 @click.command()
-@click.argument("book", required=True)
+@click.argument("book", required=False)
 @click.option(
     "-c",
     "--cookies",
     type=click.Path(exists=True, path_type=Path),
-    required=True,
     help="Path to cookies.json file",
 )
 @click.option(
     "-o",
     "--output",
     type=click.Path(path_type=Path),
-    help="Output path (defaults to ./downloads/<title>.epub)",
+    help="Output path (defaults to ./downloads/<title>.<format>)",
 )
-def main(book: str, cookies: Path, output: Path | None) -> None:
+@click.option(
+    "-f",
+    "--format",
+    type=click.Choice(["epub", "pdf"], case_sensitive=False),
+    default="epub",
+    help="Output format (epub or pdf, defaults to epub)",
+)
+@click.option(
+    "--ui",
+    is_flag=True,
+    help="Start Web UI server",
+)
+@click.option(
+    "--host",
+    type=str,
+    default="127.0.0.1",
+    help="Host to bind the Web UI server to",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=8000,
+    help="Port to run the Web UI server on",
+)
+def main(
+    book: str | None,
+    cookies: Path | None,
+    output: Path | None,
+    format: str,
+    ui: bool,
+    host: str,
+    port: int,
+) -> None:
     """Download O'Reilly books as EPUB.
 
     BOOK can be a book ID or full O'Reilly URL.
@@ -62,7 +93,40 @@ def main(book: str, cookies: Path, output: Path | None) -> None:
     Examples:
         oreilly-dl 9781098166298 -c cookies.json
         oreilly-dl "https://learning.oreilly.com/library/view/book/9781098166298/" -c cookies.json
+        oreilly-dl --ui
     """
+    if ui:
+        console.print("[bold green]Starting O'Reilly EPUB Downloader Web UI...[/]")
+        console.print(f"[bold]Address:[/] http://{host}:{port}")
+
+        import threading
+        import webbrowser
+        import time
+
+        def open_browser():
+            time.sleep(1.0)
+            webbrowser.open(f"http://{host}:{port}")
+
+        threading.Thread(target=open_browser, daemon=True).start()
+
+        import uvicorn
+        # Import app directly to avoid string lookup issues
+        from .server import app
+        uvicorn.run(app, host=host, port=port, log_level="info")
+        return
+
+    if not book:
+        console.print("[bold red]Error:[/] Missing book ID or URL. Provide BOOK or run with [bold]--ui[/] flag.")
+        ctx = click.get_current_context()
+        click.echo(ctx.get_help())
+        sys.exit(1)
+
+    if not cookies:
+        console.print("[bold red]Error:[/] Missing option '-c' / '--cookies'. A cookie file is required for command-line download.")
+        ctx = click.get_current_context()
+        click.echo(ctx.get_help())
+        sys.exit(1)
+
     book_id = extract_book_id(book)
     console.print(f"[bold]Downloading book:[/] {book_id}")
 
@@ -72,15 +136,20 @@ def main(book: str, cookies: Path, output: Path | None) -> None:
         with OreillyClient(session) as client:
             book_data = client.get_book(book_id)
 
+        fmt = format.lower()
         if output:
-            output_path = output if output.suffix == ".epub" else output.with_suffix(".epub")
+            output_path = output if output.suffix == f".{fmt}" else output.with_suffix(f".{fmt}")
         else:
             downloads = Path("downloads")
             downloads.mkdir(exist_ok=True)
             safe_title = sanitize_filename(book_data.metadata.title)
-            output_path = downloads / f"{safe_title}.epub"
+            output_path = downloads / f"{safe_title}.{fmt}"
 
-        create_epub(book_data, output_path)
+        if fmt == "pdf":
+            from .pdf_generator import create_pdf
+            create_pdf(book_data, output_path)
+        else:
+            create_epub(book_data, output_path)
         console.print(f"\n[bold green]Done:[/] {output_path}")
 
     except KeyboardInterrupt:

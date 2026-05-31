@@ -11,6 +11,10 @@ dependencies = [
     "lxml>=4.9.0",
     "rich>=13.0.0",
     "click>=8.1.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "python-multipart>=0.0.6",
+    "xhtml2pdf>=0.2.11",
 ]
 
 [project.scripts]
